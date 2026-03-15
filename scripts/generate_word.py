@@ -1,195 +1,192 @@
 #!/usr/bin/env python3
 """
-生成 Neuroscience Daily Digest Word 文档
-使用简约高级风格排版
+Neuroscience Daily Digest - Word文档生成器（标准版）
+格式特征：
+- 标题：英文斜体，14pt，黑色
+- 来源：灰色小字
+- 英文摘要：标题"Abstract (English)"深蓝色，内容10.5pt
+- 中文摘要：标题"中文摘要"深红色，内容10.5pt
+- 分隔线：灰色虚线
 """
 
-from docx import Document
-from docx.shared import Pt, RGBColor, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
-from docx.oxml.ns import qn
 from datetime import datetime
-import re
+from docx import Document
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 
-class WordGenerator:
-    """Word文档生成器"""
+# 默认配色方案
+COLORS = {
+    'title': (0, 0, 0),           # 黑色
+    'source': (80, 80, 80),       # 灰色
+    'eng_header': (0, 51, 102),   # 深蓝色
+    'cn_header': (139, 0, 0),     # 深红色
+    'text': (0, 0, 0),            # 黑色
+    'separator': (200, 200, 200), # 浅灰
+    'footer': (150, 150, 150),    # 灰色
+}
+
+def create_word_document(articles, output_path, date_str=None):
+    """
+    创建Word文档
     
-    # 配色方案
-    COLORS = {
-        'primary': (26, 54, 93),      # #1a365d 深蓝
-        'secondary': (44, 82, 130),   # #2c5282 中蓝
-        'text': (45, 55, 72),         # #2d3748 深灰
-        'muted': (74, 85, 104),       # #4a5568 中灰
-        'light': (113, 128, 150),     # #718096 浅灰
-        'border': (226, 232, 240),    # #e2e8f0 边框灰
-    }
+    Args:
+        articles: 文章列表，每篇包含 title, source, date, abstract, translated
+        output_path: 输出文件路径
+        date_str: 日期字符串，默认使用当天
+    """
+    if date_str is None:
+        date_str = datetime.now().strftime('%Y-%m-%d')
     
-    def __init__(self):
-        self.doc = Document()
-        self._setup_document()
+    doc = Document()
     
-    def _setup_document(self):
-        """设置文档基础格式"""
-        # 页面设置
-        sections = self.doc.sections
-        for section in sections:
-            section.top_margin = Cm(2.5)
-            section.bottom_margin = Cm(2.5)
-            section.left_margin = Cm(3)
-            section.right_margin = Cm(3)
+    # 设置默认字体
+    style = doc.styles['Normal']
+    style.font.name = 'Times New Roman'
+    style._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
+    style.font.size = Pt(11)
     
-    def _set_run_style(self, run, font_name='Microsoft YaHei', font_size=11, 
-                       bold=False, italic=False, color=None):
-        """设置文本运行样式"""
-        run.font.name = font_name
-        run.font.size = Pt(font_size)
-        run.font.bold = bold
-        run.font.italic = italic
-        if color:
-            run.font.color.rgb = RGBColor(*color)
-        # 设置中文字体
-        run._element.rPr.rFonts.set(qn('w:eastAsia'), font_name)
+    # 主标题
+    title = doc.add_heading(f'Neuroscience Daily Digest | {date_str}', level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title_run = title.runs[0]
+    title_run.font.size = Pt(18)
+    title_run.font.bold = True
+    title_run.font.color.rgb = RGBColor(0, 0, 128)
+    title_run.font.name = 'Times New Roman'
+    title_run._element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
     
-    def add_title_page(self, date_str, count):
-        """添加标题页"""
-        # 主标题
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run('🧠 Neuroscience Daily Digest')
-        self._set_run_style(run, font_size=22, bold=True, 
-                           color=self.COLORS['primary'])
-        
-        # 副标题
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f'{date_str}')
-        self._set_run_style(run, font_size=14, 
-                           color=self.COLORS['light'])
-        
-        # 统计信息
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f'精选 {count} 篇文献')
-        self._set_run_style(run, font_size=12, 
-                           color=self.COLORS['muted'])
-        
-        # 分隔空行
-        self.doc.add_paragraph()
-        self.doc.add_paragraph()
+    # 副标题
+    subtitle = doc.add_paragraph()
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    subtitle_run = subtitle.add_run(f'今日精选 {len(articles)} 篇神经科学前沿文献')
+    subtitle_run.font.size = Pt(12)
+    subtitle_run.font.italic = True
+    subtitle_run.font.color.rgb = RGBColor(100, 100, 100)
+    subtitle_run.font.name = 'Times New Roman'
+    subtitle_run._element.rPr.rFonts.set(qn('w:eastAsia'), '微软雅黑')
     
-    def add_article(self, number, en_title, cn_title, abstract, journal, date):
-        """添加一篇文章"""
-        # 分隔线效果（空段落）
-        self.doc.add_paragraph()
-        
-        # 序号 + 英文标题
-        p = self.doc.add_paragraph()
-        run = p.add_run(f"{number}. {en_title}")
-        self._set_run_style(run, font_size=14, bold=True, 
-                           color=self.COLORS['primary'])
-        p.paragraph_format.space_after = Pt(6)
-        
-        # 中文标题
-        p = self.doc.add_paragraph()
-        run = p.add_run(cn_title)
-        self._set_run_style(run, font_size=12, italic=True, 
-                           color=self.COLORS['muted'])
-        p.paragraph_format.space_after = Pt(6)
-        
-        # 摘要
-        p = self.doc.add_paragraph()
-        run = p.add_run(f"摘要：{abstract}")
-        self._set_run_style(run, font_size=11, 
-                           color=self.COLORS['text'])
-        p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
-        p.paragraph_format.space_after = Pt(6)
-        
-        # 来源
-        p = self.doc.add_paragraph()
-        run = p.add_run(f"📄 {journal} | {date}")
-        self._set_run_style(run, font_size=10, italic=True, 
-                           color=self.COLORS['light'])
-        p.paragraph_format.space_after = Pt(12)
+    doc.add_paragraph()  # 空行
     
-    def add_statistics(self, count, sources):
-        """添加统计信息"""
-        self.doc.add_paragraph()
-        self.doc.add_paragraph()
+    # 添加每篇文章
+    for i, article in enumerate(articles, 1):
+        # 文章序号和标题（斜体）
+        heading = doc.add_heading(level=1)
+        heading_run = heading.add_run(f"{i}. {article['title']}")
+        heading_run.font.size = Pt(14)
+        heading_run.font.italic = True
+        heading_run.font.color.rgb = RGBColor(*COLORS['title'])
+        heading_run.font.name = 'Times New Roman'
         
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run('--- 今日统计 ---')
-        self._set_run_style(run, font_size=12, bold=True, 
-                           color=self.COLORS['secondary'])
+        # 来源和日期
+        source_para = doc.add_paragraph()
+        source_run = source_para.add_run(f"Source: {article['source']} | {article['date']}")
+        source_run.font.size = Pt(10)
+        source_run.font.color.rgb = RGBColor(*COLORS['source'])
+        source_run.font.name = 'Times New Roman'
+        source_para.paragraph_format.space_after = Pt(6)
         
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f'总文章数：{count}篇')
-        self._set_run_style(run, font_size=11, 
-                           color=self.COLORS['text'])
+        # 英文摘要标题
+        eng_title = doc.add_paragraph()
+        eng_title_run = eng_title.add_run("Abstract (English)")
+        eng_title_run.font.size = Pt(11)
+        eng_title_run.font.bold = True
+        eng_title_run.font.color.rgb = RGBColor(*COLORS['eng_header'])
+        eng_title_run.font.name = 'Times New Roman'
         
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(f'来源：{sources}')
-        self._set_run_style(run, font_size=10, 
-                           color=self.COLORS['light'])
+        # 英文摘要内容
+        eng_abstract = doc.add_paragraph()
+        eng_abstract_run = eng_abstract.add_run(article.get('abstract', ''))
+        eng_abstract_run.font.size = Pt(10.5)
+        eng_abstract.paragraph_format.line_spacing = 1.15
+        eng_abstract.paragraph_format.space_after = Pt(8)
+        
+        # 中文摘要标题
+        cn_title = doc.add_paragraph()
+        cn_title_run = cn_title.add_run("中文摘要")
+        cn_title_run.font.size = Pt(11)
+        cn_title_run.font.bold = True
+        cn_title_run.font.color.rgb = RGBColor(*COLORS['cn_header'])
+        cn_title_run.font.name = 'Times New Roman'
+        cn_title_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
+        
+        # 中文摘要内容
+        cn_abstract = doc.add_paragraph()
+        cn_abstract_run = cn_abstract.add_run(article.get('translated', ''))
+        cn_abstract_run.font.size = Pt(10.5)
+        cn_abstract_run.font.name = 'Times New Roman'
+        cn_abstract_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
+        cn_abstract.paragraph_format.line_spacing = 1.15
+        cn_abstract.paragraph_format.space_after = Pt(12)
+        
+        # 分隔线
+        if i < len(articles):
+            separator = doc.add_paragraph()
+            separator_run = separator.add_run("─" * 60)
+            separator_run.font.color.rgb = RGBColor(*COLORS['separator'])
+            separator.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            separator.paragraph_format.space_before = Pt(6)
+            separator.paragraph_format.space_after = Pt(12)
     
-    def save(self, output_path):
-        """保存文档"""
-        self.doc.save(output_path)
-        print(f"✅ Word文档已生成: {output_path}")
+    # 页脚
+    doc.add_paragraph()
+    footer = doc.add_paragraph()
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    footer_run = footer.add_run(f"Generated by Neuroscience Daily Digest System | {date_str}")
+    footer_run.font.size = Pt(9)
+    footer_run.font.color.rgb = RGBColor(*COLORS['footer'])
+    footer_run.font.italic = True
+    footer_run.font.name = 'Times New Roman'
+    
+    # 保存文档
+    doc.save(output_path)
+    print(f"✅ Word文档已保存: {output_path}")
+    return output_path
 
 
-def parse_markdown(md_content):
-    """解析Markdown内容"""
+def parse_articles_from_md(md_content):
+    """从Markdown解析文章列表"""
+    import re
+    
     articles = []
     lines = md_content.split('\n')
-    
-    current_article = {}
-    in_abstract = False
+    current = {}
     
     for line in lines:
         line = line.strip()
         
-        # 匹配文章标题行: ### 1. Title
+        # 匹配标题行: ### 1. Title
         if line.startswith('### ') and '. ' in line:
-            if current_article and 'title' in current_article:
-                articles.append(current_article)
-            current_article = {}
+            if current and 'title' in current:
+                articles.append(current)
+            current = {}
             parts = line.replace('### ', '').split('. ', 1)
-            current_article['number'] = parts[0]
-            current_article['title'] = parts[1]
-            in_abstract = False
+            current['number'] = parts[0]
+            current['title'] = parts[1]
         
-        # 匹配中文标题: *中文标题*
-        elif line.startswith('*') and line.endswith('*') and 'title' in current_article:
-            current_article['cn_title'] = line.strip('*')
+        # 匹配来源行
+        elif line.startswith('📄') and '|' in line:
+            parts = line.replace('📄 *', '').strip('*').split(' | ')
+            if len(parts) == 2:
+                current['source'] = parts[0]
+                current['date'] = parts[1]
         
         # 匹配摘要
         elif line.startswith('**摘要**：'):
-            current_article['abstract'] = line.replace('**摘要**：', '')
-            in_abstract = True
+            current['abstract'] = line.replace('**摘要**：', '')
         
-        # 继续摘要（多行）
-        elif in_abstract and line and not line.startswith('📄'):
-            current_article['abstract'] += line
-        
-        # 匹配来源: 📄 Journal | Date
-        elif line.startswith('📄'):
-            parts = line.replace('📄 ', '').split(' | ')
-            if len(parts) == 2:
-                current_article['journal'] = parts[0].strip()
-                current_article['date'] = parts[1].strip()
-            in_abstract = False
+        # 匹配中文翻译（括号内的内容）
+        elif line.startswith('*') and line.endswith('*') and 'title' in current:
+            current['translated'] = line.strip('*')
     
-    if current_article and 'title' in current_article:
-        articles.append(current_article)
+    if current and 'title' in current:
+        articles.append(current)
     
     return articles
 
 
 def main():
-    """主函数"""
+    """命令行入口"""
     import sys
     
     if len(sys.argv) < 3:
@@ -197,42 +194,23 @@ def main():
         return
     
     input_file = sys.argv[2]
-    output_file = sys.argv[4] if len(sys.argv) > 4 else 'neuro_digest.docx'
+    output_file = sys.argv[4] if len(sys.argv) > 4 else 'Neuroscience_Daily_Digest.docx'
     
     # 读取Markdown
     with open(input_file, 'r', encoding='utf-8') as f:
         md_content = f.read()
     
     # 解析文章
-    articles = parse_markdown(md_content)
+    articles = parse_articles_from_md(md_content)
+    
+    if not articles:
+        print("⚠️ 未找到文章，请检查Markdown格式")
+        return
     
     # 生成Word
-    gen = WordGenerator()
-    
-    # 提取日期（从文件名或内容）
-    date_str = datetime.now().strftime('%Y年%m月%d日')
-    
-    # 添加标题页
-    gen.add_title_page(date_str, len(articles))
-    
-    # 添加文章
-    for article in articles:
-        gen.add_article(
-            number=article.get('number', '1'),
-            en_title=article.get('title', ''),
-            cn_title=article.get('cn_title', ''),
-            abstract=article.get('abstract', ''),
-            journal=article.get('journal', 'Unknown'),
-            date=article.get('date', date_str)
-        )
-    
-    # 添加统计
-    sources = ', '.join(set(a.get('journal', '') for a in articles[:5]))
-    gen.add_statistics(len(articles), sources)
-    
-    # 保存
-    gen.save(output_file)
+    create_word_document(articles, output_file)
+    print(f"共处理 {len(articles)} 篇文章")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -1,114 +1,214 @@
 #!/usr/bin/env python3
 """
-发送 Neuroscience Daily Digest 邮件
-支持 Word 和 PPT 双附件
+Neuroscience Daily Digest - 邮件发送脚本（标准版）
 """
 
 import smtplib
 import os
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from datetime import datetime
 
-class EmailSender:
-    """邮件发送器"""
+def create_html_body(articles, date_str=None):
+    """创建邮件HTML正文（简约风格）"""
+    if date_str is None:
+        date_str = datetime.now().strftime('%Y-%m-%d')
     
-    def __init__(self, smtp_server='smtp.qq.com', smtp_port=587):
-        self.smtp_server = smtp_server
-        self.smtp_port = smtp_port
-        self.sender = os.environ.get('EMAIL_SENDER', 'your_email@qq.com')
-        self.password = os.environ.get('EMAIL_PASSWORD', 'your_auth_code')
-        self.receiver = os.environ.get('EMAIL_RECEIVER', self.sender)
+    article_count = len(articles)
     
-    def send_digest(self, docx_path, pptx_path, date_str=None):
-        """发送每日摘要邮件"""
-        if date_str is None:
-            date_str = datetime.now().strftime('%Y-%m-%d')
-        
-        # 创建邮件
-        msg = MIMEMultipart()
-        msg['From'] = self.sender
-        msg['To'] = self.receiver
-        msg['Subject'] = f'Neuroscience Daily Digest | {date_str}'
-        
-        # 邮件正文
-        body = f"""您好！
-
-今日神经科学文献精选已为您整理好。
-
-📄 附件包含：
-   • Word 完整版（适合阅读、批注）
-   • PowerPoint 演示版（适合汇报、分享）
-
-内容来源于 Planet Neuroscience，
-精选最新神经科学研究进展。
-
-祝您阅读愉快！
-
----
-Neuroscience Daily Digest System
-{date_str}
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ 
+            font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }}
+        h1 {{ 
+            color: #003380; 
+            text-align: center; 
+            border-bottom: 2px solid #003380; 
+            padding-bottom: 10px; 
+        }}
+        .subtitle {{ 
+            text-align: center; 
+            color: #666; 
+            font-style: italic; 
+            margin-bottom: 30px; 
+        }}
+        .article {{ 
+            background: #f9f9f9; 
+            border-left: 4px solid #003380; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+            border-radius: 0 8px 8px 0; 
+        }}
+        .article-title {{ 
+            font-size: 16px; 
+            font-weight: bold; 
+            color: #003380; 
+            margin-bottom: 5px; 
+            font-style: italic; 
+        }}
+        .article-source {{ 
+            font-size: 12px; 
+            color: #666; 
+            margin-bottom: 10px; 
+        }}
+        .article-abstract {{ 
+            font-size: 13px; 
+            color: #444; 
+            margin-top: 10px; 
+        }}
+        .article-abstract strong {{ 
+            color: #003380; 
+        }}
+        .footer {{ 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 20px; 
+            border-top: 1px solid #ddd; 
+            color: #999; 
+            font-size: 12px; 
+        }}
+    </style>
+</head>
+<body>
+    <h1>📰 Neuroscience Daily Digest | {date_str}</h1>
+    <p class="subtitle">今日精选 {article_count} 篇神经科学前沿文献</p>
 """
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+    
+    for i, article in enumerate(articles, 1):
+        # 截取摘要前200字符用于邮件预览
+        abstract = article.get('abstract', '')
+        short_abstract = abstract[:200] + "..." if len(abstract) > 200 else abstract
         
-        # 添加 Word 附件
-        if docx_path and os.path.exists(docx_path):
-            with open(docx_path, 'rb') as f:
-                docx_attachment = MIMEApplication(f.read())
-                docx_attachment.add_header(
-                    'Content-Disposition', 
-                    'attachment', 
-                    filename=os.path.basename(docx_path)
-                )
-                msg.attach(docx_attachment)
-        
-        # 添加 PPT 附件
-        if pptx_path and os.path.exists(pptx_path):
-            with open(pptx_path, 'rb') as f:
-                pptx_attachment = MIMEApplication(f.read())
-                pptx_attachment.add_header(
-                    'Content-Disposition', 
-                    'attachment', 
-                    filename=os.path.basename(pptx_path)
-                )
-                msg.attach(pptx_attachment)
-        
-        # 发送邮件
-        try:
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.starttls()
-            server.login(self.sender, self.password)
-            server.sendmail(self.sender, self.receiver, msg.as_string())
-            server.quit()
-            print(f"✅ 邮件发送成功！收件人: {self.receiver}")
-            return True
-        except Exception as e:
-            print(f"❌ 邮件发送失败: {e}")
-            return False
+        html += f"""
+    <div class="article">
+        <div class="article-title">{i}. {article.get('title', '')}</div>
+        <div class="article-source">📄 {article.get('source', '')} | 📅 {article.get('date', date_str)}</div>
+        <div class="article-abstract"><strong>Abstract:</strong> {short_abstract}</div>
+    </div>
+        """
+    
+    html += f"""
+    <div class="footer">
+        Generated by Neuroscience Daily Digest System<br>
+        详细内容请查看附件Word文档
+    </div>
+</body>
+</html>
+"""
+    return html
+
+
+def send_email(docx_path, html_body, date_str=None, 
+               sender=None, receiver=None, password=None):
+    """
+    发送邮件
+    
+    Args:
+        docx_path: Word文档路径
+        html_body: HTML正文内容
+        date_str: 日期字符串
+        sender: 发件人邮箱（默认从环境变量读取）
+        receiver: 收件人邮箱（默认从环境变量读取）
+        password: 邮箱授权码（默认从环境变量读取）
+    """
+    if date_str is None:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    
+    # 从环境变量读取配置
+    sender = sender or os.environ.get('EMAIL_SENDER', 'your_email@qq.com')
+    receiver = receiver or os.environ.get('EMAIL_RECEIVER', sender)
+    password = password or os.environ.get('EMAIL_PASSWORD', '')
+    
+    # 创建邮件
+    msg = MIMEMultipart('mixed')
+    msg['Subject'] = f'📰 Neuroscience Daily Digest | {date_str}'
+    msg['From'] = sender
+    msg['To'] = receiver
+    
+    # 添加HTML正文
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+    
+    # 添加Word附件
+    if docx_path and os.path.exists(docx_path):
+        with open(docx_path, 'rb') as f:
+            docx_attachment = MIMEApplication(f.read())
+            docx_attachment.add_header(
+                'Content-Disposition', 
+                'attachment', 
+                filename=f'Neuroscience_Daily_Digest_{date_str}.docx'
+            )
+            msg.attach(docx_attachment)
+    
+    # 发送邮件
+    try:
+        server = smtplib.SMTP('smtp.qq.com', 587)
+        server.starttls()
+        server.login(sender, password)
+        server.sendmail(sender, receiver, msg.as_string())
+        server.quit()
+        print(f"✅ 邮件发送成功！收件人: {receiver}")
+        return True
+    except Exception as e:
+        print(f"❌ 邮件发送失败: {e}")
+        return False
 
 
 def main():
-    """主函数"""
+    """命令行入口"""
     import sys
-    import argparse
+    import json
     
-    parser = argparse.ArgumentParser(description='发送 Neuroscience Daily Digest 邮件')
-    parser.add_argument('--docx', help='Word文档路径')
-    parser.add_argument('--pptx', help='PPT文档路径')
-    parser.add_argument('--date', help='日期 (YYYY-MM-DD)', default=None)
+    if len(sys.argv) < 2:
+        print("""用法:
+    # 方式1: 使用JSON文件
+    python send_email.py --articles articles.json --docx digest.docx
     
-    args = parser.parse_args()
-    
-    # 检查环境变量
-    if not os.environ.get('EMAIL_PASSWORD'):
-        print("⚠️ 请设置环境变量 EMAIL_PASSWORD")
-        print("示例: export EMAIL_PASSWORD='your_auth_code'")
+    # 方式2: 直接使用（需先设置环境变量）
+    export EMAIL_SENDER='your_email@qq.com'
+    export EMAIL_PASSWORD='your_auth_code'
+    export EMAIL_RECEIVER='receiver@qq.com'
+    python send_email.py --docx digest.docx --articles articles.json
+        """)
         return
     
-    sender = EmailSender()
-    sender.send_digest(args.docx, args.pptx, args.date)
+    # 解析参数
+    docx_path = None
+    articles_path = None
+    
+    for i, arg in enumerate(sys.argv):
+        if arg == '--docx' and i + 1 < len(sys.argv):
+            docx_path = sys.argv[i + 1]
+        elif arg == '--articles' and i + 1 < len(sys.argv):
+            articles_path = sys.argv[i + 1]
+    
+    if not docx_path:
+        print("❌ 请指定Word文档路径: --docx digest.docx")
+        return
+    
+    # 读取文章数据
+    articles = []
+    if articles_path and os.path.exists(articles_path):
+        with open(articles_path, 'r', encoding='utf-8') as f:
+            articles = json.load(f)
+    
+    # 生成HTML正文
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    html_body = create_html_body(articles, date_str)
+    
+    # 发送邮件
+    send_email(docx_path, html_body, date_str)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
